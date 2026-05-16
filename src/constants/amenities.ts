@@ -1,0 +1,17 @@
+export const AMENITIES_LIST = [
+  { code: "wifi", nameZh: "WiFi", category: "facility" },
+  { code: "pool", nameZh: "泳池", category: "facility" },
+  { code: "spa", nameZh: "水疗", category: "facility" },
+  { code: "restaurant", nameZh: "餐厅", category: "facility" },
+  { code: "bar", nameZh: "酒吧", category: "facility" },
+  { code: "gym", nameZh: "健身房", category: "facility" },
+  { code: "parking", nameZh: "停车场", category: "facility" },
+  { code: "game_drive", nameZh: "游猎观光", category: "activity" },
+  { code: "hot_balloon", nameZh: "热气球", category: "activity" },
+  { code: "bush_dinner", nameZh: "丛林晚餐", category: "activity" },
+  { code: "nature_walk", nameZh: "自然徒步", category: "activity" },
+  { code: "bird_watching", nameZh: "观鸟", category: "activity" },
+  { code: "massage", nameZh: "按摩", category: "service" },
+  { code: "transfer", nameZh: "接送服务", category: "service" },
+  { code: "laundry", nameZh: "洗衣服务", category: "service" },
+] as const;
