@@ -1,0 +1,282 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+const DEEPSEEK_API_KEY = "sk-f99c3a7d7b994ac1b743fc3b737add81";
+
+interface ParsedHotel {
+  regionNameZh: string;
+  nameZh: string;
+  nameEn: string;
+  accommodationType: string;
+  starRating?: number;
+  guestRating?: number;
+  latitude?: number;
+  longitude?: number;
+  distanceToParkGate?: number;
+  nearestAirstrip?: string;
+  distanceToAirstrip?: number;
+  transferProvided?: boolean;
+  hasChineseService?: boolean;
+  descriptionZh?: string;
+  totalRooms?: number;
+  roomTypes?: {
+    nameZh: string;
+    nameEn?: string;
+    roomCategory: string;
+    maxGuests?: number;
+    bedType?: string;
+    seasonalPrices?: {
+      seasonName: string;
+      dateStart: string;
+      dateEnd: string;
+      priceRoomOnly?: number;
+      priceHalfBoard?: number;
+      priceFullBoard?: number;
+      currency?: string;
+    }[];
+  }[];
+  amenities?: string[];
+  tags?: { tagCode: string; weight?: number }[];
+  targetSpecies?: { species: string; bestSeasonStart?: number; bestSeasonEnd?: number }[];
+}
+
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  const pdfParse = await import("pdf-parse");
+  const data = await pdfParse.default(buffer);
+  return data.text;
+}
+
+async function analyzeWithDeepSeek(text: string): Promise<ParsedHotel[]> {
+  const prompt = `你是一个专业的酒店数据录入助手。请从以下酒店介绍文档中提取所有酒店信息，以严格的JSON数组格式返回。
+
+返回格式（严格遵循以下结构，每个酒店一个对象）：
+[
+  {
+    "regionNameZh": "区域中文名（如：塞伦盖蒂国家公园）",
+    "nameZh": "酒店中文名",
+    "nameEn": "酒店英文名",
+    "accommodationType": "住宿类型: lodge|tented_camp|hotel|resort|villa",
+    "starRating": 星级(1-5),
+    "guestRating": 评分(0-5),
+    "latitude": 纬度,
+    "longitude": 经度,
+    "distanceToParkGate": 距离公园大门公里数,
+    "nearestAirstrip": "最近的机场/跑道名",
+    "distanceToAirstrip": 距离机场公里数,
+    "transferProvided": true/false,
+    "hasChineseService": true/false,
+    "descriptionZh": "酒店中文描述",
+    "totalRooms": 房间总数,
+    "roomTypes": [
+      {
+        "nameZh": "房型中文名",
+        "nameEn": "房型英文名",
+        "roomCategory": "standard|deluxe|suite|villa",
+        "maxGuests": 最多入住人数,
+        "bedType": "single|double|twin|king",
+        "seasonalPrices": [
+          {
+            "seasonName": "季节名称（如：旺季）",
+            "dateStart": "YYYY-MM-DD",
+            "dateEnd": "YYYY-MM-DD",
+            "priceRoomOnly": 每晚仅客房价格(USD),
+            "priceHalfBoard": 每晚半食宿价格(USD),
+            "priceFullBoard": 每晚全食宿价格(USD),
+            "currency": "USD"
+          }
+        ]
+      }
+    ],
+    "amenities": ["设施代码列表: wifi,pool,restaurant,bar,game_drive,hot_balloon,bush_dinner,spa,transfer,laundry,nature_walk"],
+    "tags": [
+      {"tagCode": "luxury|budget|family|romantic|eco|safari|beach|culture|adventure|business", "weight": 1-5}
+    ],
+    "targetSpecies": [
+      {"species": "lion|elephant|leopard|cheetah|rhino|buffalo|giraffe|zebra|wildebeest|hippo|bird", "bestSeasonStart": 1, "bestSeasonEnd": 12}
+    ]
+  }
+]
+
+注意：
+1. 只返回JSON数组，不要包含任何其他文字说明
+2. 如果文档中有多个酒店，全部提取出来
+3. 不确定的字段请用null或省略
+4. 所有价格默认为USD
+5. 区域名称请使用标准名称
+
+文档内容：
+${text.slice(0, 30000)}`;
+
+  const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-v4-flash",
+      messages: [
+        { role: "system", content: "你是一个酒店数据提取助手，只输出JSON格式数据。" },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.1,
+      max_tokens: 8192,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`DeepSeek API error: ${res.status} ${err}`);
+  }
+
+  const json = await res.json();
+  const content = json.choices?.[0]?.message?.content;
+  if (!content) throw new Error("DeepSeek returned empty response");
+
+  // Try to parse JSON from the response (handle markdown-wrapped JSON)
+  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const cleanJson = jsonMatch ? jsonMatch[1] : content;
+  return JSON.parse(cleanJson.trim());
+}
+
+// POST: analyze PDF and return preview
+export async function POST(request: NextRequest) {
+  try {
+    const contentType = request.headers.get("content-type") || "";
+
+    // Handle confirm action (JSON body)
+    if (contentType.includes("application/json")) {
+      const body = await request.json();
+      if (body.action === "confirm") {
+        return handleConfirm(body.hotels);
+      }
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    }
+
+    // Handle file upload (multipart/form-data)
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    if (!file) {
+      return NextResponse.json({ error: "请上传PDF文件" }, { status: 400 });
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const text = await extractTextFromPDF(buffer);
+
+    if (!text.trim()) {
+      return NextResponse.json({ error: "无法从PDF中提取文字内容" }, { status: 400 });
+    }
+
+    const hotels = await analyzeWithDeepSeek(text);
+    return NextResponse.json({ hotels, rawTextLength: text.length });
+  } catch (err) {
+    console.error("Import error:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "导入失败" },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleConfirm(hotels: ParsedHotel[]) {
+  const results: { nameZh: string; success: boolean; error?: string }[] = [];
+
+  for (const hotel of hotels) {
+    try {
+      // Find region
+      const region = await prisma.region.findFirst({
+        where: { nameZh: { contains: hotel.regionNameZh } },
+      });
+      if (!region) {
+        results.push({ nameZh: hotel.nameZh, success: false, error: `未找到区域: ${hotel.regionNameZh}` });
+        continue;
+      }
+
+      // Create hotel
+      const created = await prisma.hotel.create({
+        data: {
+          regionId: region.id,
+          nameZh: hotel.nameZh,
+          nameEn: hotel.nameEn,
+          accommodationType: hotel.accommodationType,
+          starRating: hotel.starRating ?? null,
+          guestRating: hotel.guestRating ?? null,
+          latitude: hotel.latitude ?? null,
+          longitude: hotel.longitude ?? null,
+          distanceToParkGate: hotel.distanceToParkGate ?? null,
+          nearestAirstrip: hotel.nearestAirstrip ?? null,
+          distanceToAirstrip: hotel.distanceToAirstrip ?? null,
+          transferProvided: hotel.transferProvided ?? false,
+          hasChineseService: hotel.hasChineseService ?? false,
+          descriptionZh: hotel.descriptionZh ?? null,
+          totalRooms: hotel.totalRooms ?? null,
+          status: "active",
+          roomTypes: hotel.roomTypes
+            ? {
+                create: hotel.roomTypes.map((rt) => ({
+                  nameZh: rt.nameZh,
+                  nameEn: rt.nameEn ?? null,
+                  roomCategory: rt.roomCategory,
+                  maxGuests: rt.maxGuests ?? 2,
+                  bedType: rt.bedType ?? null,
+                  seasonalPrices: rt.seasonalPrices
+                    ? {
+                        create: rt.seasonalPrices.map((sp) => ({
+                          seasonName: sp.seasonName,
+                          dateStart: new Date(sp.dateStart),
+                          dateEnd: new Date(sp.dateEnd),
+                          priceRoomOnly: sp.priceRoomOnly ?? null,
+                          priceHalfBoard: sp.priceHalfBoard ?? null,
+                          priceFullBoard: sp.priceFullBoard ?? null,
+                          currency: sp.currency ?? "USD",
+                          isAvailable: true,
+                        })),
+                      }
+                    : undefined,
+                })),
+              }
+            : undefined,
+          hotelTags: hotel.tags
+            ? {
+                create: hotel.tags.map((t) => ({
+                  tagCode: t.tagCode,
+                  weight: t.weight ?? 3,
+                })),
+              }
+            : undefined,
+          targetSpecies: hotel.targetSpecies
+            ? {
+                create: hotel.targetSpecies.map((s) => ({
+                  species: s.species,
+                  bestSeasonStart: s.bestSeasonStart ?? null,
+                  bestSeasonEnd: s.bestSeasonEnd ?? null,
+                })),
+              }
+            : undefined,
+        },
+      });
+
+      // Connect amenities
+      if (hotel.amenities && hotel.amenities.length > 0) {
+        const amenityRecords = await prisma.amenity.findMany({
+          where: { code: { in: hotel.amenities } },
+        });
+        for (const amenity of amenityRecords) {
+          await prisma.hotelAmenity.create({
+            data: { hotelId: created.id, amenityId: amenity.id, isFree: true },
+          }).catch(() => {}); // Skip duplicates
+        }
+      }
+
+      results.push({ nameZh: hotel.nameZh, success: true });
+    } catch (err) {
+      results.push({
+        nameZh: hotel.nameZh,
+        success: false,
+        error: err instanceof Error ? err.message : "导入失败",
+      });
+    }
+  }
+
+  return NextResponse.json({ results });
+}
