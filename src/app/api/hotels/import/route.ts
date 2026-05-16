@@ -175,68 +175,71 @@ async function handleConfirm(hotels: ParsedHotel[]) {
         continue;
       }
 
-      const created = await prisma.hotel.create({
-        data: {
-          regionId: region.id,
-          nameZh: hotel.nameZh,
-          nameEn: hotel.nameEn,
-          accommodationType: hotel.accommodationType,
-          starRating: hotel.starRating ?? null,
-          guestRating: hotel.guestRating ?? null,
-          latitude: hotel.latitude ?? null,
-          longitude: hotel.longitude ?? null,
-          distanceToParkGate: hotel.distanceToParkGate ?? null,
-          nearestAirstrip: hotel.nearestAirstrip ?? null,
-          distanceToAirstrip: hotel.distanceToAirstrip ?? null,
-          transferProvided: hotel.transferProvided ?? false,
-          hasChineseService: hotel.hasChineseService ?? false,
-          descriptionZh: hotel.descriptionZh ?? null,
-          totalRooms: hotel.totalRooms ?? null,
-          status: "active",
-          roomTypes: hotel.roomTypes
-            ? {
-                create: hotel.roomTypes.map((rt) => ({
-                  nameZh: rt.nameZh,
-                  nameEn: rt.nameEn ?? null,
-                  roomCategory: rt.roomCategory,
-                  maxGuests: rt.maxGuests ?? 2,
-                  bedType: rt.bedType ?? null,
-                  seasonalPrices: rt.seasonalPrices
-                    ? {
-                        create: rt.seasonalPrices.map((sp) => ({
-                          seasonName: sp.seasonName,
-                          dateStart: new Date(sp.dateStart),
-                          dateEnd: new Date(sp.dateEnd),
-                          priceRoomOnly: sp.priceRoomOnly ?? null,
-                          priceHalfBoard: sp.priceHalfBoard ?? null,
-                          priceFullBoard: sp.priceFullBoard ?? null,
-                          currency: sp.currency ?? "USD",
-                          isAvailable: true,
-                        })),
-                      }
-                    : undefined,
-                })),
-              }
-            : undefined,
-          hotelTags: hotel.tags
-            ? {
-                create: hotel.tags.map((t) => ({
-                  tagCode: t.tagCode,
-                  weight: t.weight ?? 3,
-                })),
-              }
-            : undefined,
-          targetSpecies: hotel.targetSpecies
-            ? {
-                create: hotel.targetSpecies.map((s) => ({
-                  species: s.species,
-                  bestSeasonStart: s.bestSeasonStart ?? null,
-                  bestSeasonEnd: s.bestSeasonEnd ?? null,
-                })),
-              }
-            : undefined,
-        },
-      });
+      const hotelData: Record<string, unknown> = {
+        regionId: region.id,
+        nameZh: hotel.nameZh,
+        nameEn: hotel.nameEn,
+        accommodationType: hotel.accommodationType,
+        starRating: hotel.starRating ?? null,
+        guestRating: hotel.guestRating ?? null,
+        latitude: hotel.latitude ?? null,
+        longitude: hotel.longitude ?? null,
+        distanceToParkGate: hotel.distanceToParkGate ?? null,
+        nearestAirstrip: hotel.nearestAirstrip ?? null,
+        distanceToAirstrip: hotel.distanceToAirstrip ?? null,
+        transferProvided: hotel.transferProvided ?? false,
+        hasChineseService: hotel.hasChineseService ?? false,
+        descriptionZh: hotel.descriptionZh ?? null,
+        totalRooms: hotel.totalRooms ?? null,
+        status: "active",
+      };
+
+      if (hotel.roomTypes && hotel.roomTypes.length > 0) {
+        hotelData.roomTypes = {
+          create: hotel.roomTypes.map((rt) => ({
+            nameZh: rt.nameZh,
+            nameEn: rt.nameEn ?? null,
+            roomCategory: rt.roomCategory,
+            maxGuests: rt.maxGuests ?? 2,
+            bedType: rt.bedType ?? null,
+            seasonalPrices: rt.seasonalPrices
+              ? {
+                  create: rt.seasonalPrices.map((sp) => ({
+                    seasonName: sp.seasonName,
+                    dateStart: new Date(sp.dateStart),
+                    dateEnd: new Date(sp.dateEnd),
+                    priceRoomOnly: sp.priceRoomOnly ?? null,
+                    priceHalfBoard: sp.priceHalfBoard ?? null,
+                    priceFullBoard: sp.priceFullBoard ?? null,
+                    currency: sp.currency ?? "USD",
+                    isAvailable: true,
+                  })),
+                }
+              : undefined,
+          })),
+        };
+      }
+
+      if (hotel.tags && hotel.tags.length > 0) {
+        hotelData.hotelTags = {
+          create: hotel.tags.map((t) => ({
+            tagCode: t.tagCode,
+            weight: t.weight ?? 3,
+          })),
+        };
+      }
+
+      if (hotel.targetSpecies && hotel.targetSpecies.length > 0) {
+        hotelData.targetSpecies = {
+          create: hotel.targetSpecies.map((s) => ({
+            species: s.species,
+            bestSeasonStart: s.bestSeasonStart ?? null,
+            bestSeasonEnd: s.bestSeasonEnd ?? null,
+          })),
+        };
+      }
+
+      const created = await prisma.hotel.create({ data: hotelData as never });
 
       if (hotel.amenities && hotel.amenities.length > 0) {
         const amenityRecords = await prisma.amenity.findMany({
