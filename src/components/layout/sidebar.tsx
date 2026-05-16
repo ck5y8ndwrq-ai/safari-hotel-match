@@ -12,14 +12,12 @@ import {
   MapPin,
   Settings,
   LogOut,
-  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
   { href: "/", label: "工作台", icon: LayoutDashboard },
   { href: "/hotels", label: "酒店管理", icon: Hotel },
-  { href: "/hotels/import", label: "批量导入", icon: Upload },
   { href: "/matching", label: "智能匹配", icon: Search },
   { href: "/customers", label: "客户管理", icon: Users },
   { href: "/orders", label: "订单管理", icon: FileText },

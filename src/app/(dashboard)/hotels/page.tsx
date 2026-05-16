@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Eye, Trash2 } from "lucide-react";
+import { Plus, Pencil, Eye, Trash2, Upload } from "lucide-react";
 import { ACCOMMODATION_TYPE_MAP } from "@/constants/accommodation-type";
 
 interface Hotel {
@@ -70,9 +70,14 @@ export default function HotelsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">酒店管理</h1>
-        <Button asChild>
-          <Link href="/hotels/new"><Plus className="h-4 w-4 mr-1" />新增酒店</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/hotels/import"><Upload className="h-4 w-4 mr-1" />一键导入</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/hotels/new"><Plus className="h-4 w-4 mr-1" />新增酒店</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 items-end">
