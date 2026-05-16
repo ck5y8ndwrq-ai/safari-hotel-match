@@ -40,12 +40,6 @@ interface ParsedHotel {
   targetSpecies?: { species: string; bestSeasonStart?: number; bestSeasonEnd?: number }[];
 }
 
-async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const pdfParse = await import("pdf-parse");
-  const data = await pdfParse.default(buffer);
-  return data.text;
-}
-
 async function analyzeWithDeepSeek(text: string): Promise<ParsedHotel[]> {
   const prompt = `你是一个专业的酒店数据录入助手。请从以下酒店介绍文档中提取所有酒店信息，以严格的JSON数组格式返回。
 
@@ -133,13 +127,11 @@ ${text.slice(0, 30000)}`;
   const content = json.choices?.[0]?.message?.content;
   if (!content) throw new Error("DeepSeek returned empty response");
 
-  // Try to parse JSON from the response (handle markdown-wrapped JSON)
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const cleanJson = jsonMatch ? jsonMatch[1] : content;
   return JSON.parse(cleanJson.trim());
 }
 
-// POST: analyze PDF and return preview
 export async function POST(request: NextRequest) {
   try {
     const contentType = request.headers.get("content-type") || "";
@@ -153,18 +145,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    // Handle file upload (multipart/form-data)
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    if (!file) {
-      return NextResponse.json({ error: "请上传PDF文件" }, { status: 400 });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const text = await extractTextFromPDF(buffer);
-
+    // Handle text analysis (extracted text from client side)
+    const text = await request.text();
     if (!text.trim()) {
-      return NextResponse.json({ error: "无法从PDF中提取文字内容" }, { status: 400 });
+      return NextResponse.json({ error: "文本内容为空" }, { status: 400 });
     }
 
     const hotels = await analyzeWithDeepSeek(text);
@@ -183,7 +167,6 @@ async function handleConfirm(hotels: ParsedHotel[]) {
 
   for (const hotel of hotels) {
     try {
-      // Find region
       const region = await prisma.region.findFirst({
         where: { nameZh: { contains: hotel.regionNameZh } },
       });
@@ -192,7 +175,6 @@ async function handleConfirm(hotels: ParsedHotel[]) {
         continue;
       }
 
-      // Create hotel
       const created = await prisma.hotel.create({
         data: {
           regionId: region.id,
@@ -256,7 +238,6 @@ async function handleConfirm(hotels: ParsedHotel[]) {
         },
       });
 
-      // Connect amenities
       if (hotel.amenities && hotel.amenities.length > 0) {
         const amenityRecords = await prisma.amenity.findMany({
           where: { code: { in: hotel.amenities } },
@@ -264,7 +245,7 @@ async function handleConfirm(hotels: ParsedHotel[]) {
         for (const amenity of amenityRecords) {
           await prisma.hotelAmenity.create({
             data: { hotelId: created.id, amenityId: amenity.id, isFree: true },
-          }).catch(() => {}); // Skip duplicates
+          }).catch(() => {});
         }
       }
 

@@ -20,6 +20,40 @@ interface ImportResult {
   error?: string;
 }
 
+// Simple client-side PDF text extraction
+async function extractTextFromPDF(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const raw = new TextDecoder("utf-8", { fatal: false }).decode(arrayBuffer);
+
+  // Extract text between parentheses (common in PDF content streams)
+  const texts: string[] = [];
+  const regex = /\(([^)]*)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(raw)) !== null) {
+    let text = match[1]
+      .replace(/\\([0-9]{3})/g, (_, code) => String.fromCharCode(parseInt(code, 8)))
+      .replace(/\\(.)/g, "$1");
+    text = text.trim();
+    if (text.length > 3 && /[一-鿿]|[a-zA-Z]{3,}/.test(text)) {
+      texts.push(text);
+    }
+  }
+
+  // Also try Tj operator format
+  const tjRegex = /\(([^)]*)\)\s*Tj/g;
+  while ((match = tjRegex.exec(raw)) !== null) {
+    let text = match[1]
+      .replace(/\\([0-9]{3})/g, (_, code) => String.fromCharCode(parseInt(code, 8)))
+      .replace(/\\(.)/g, "$1");
+    text = text.trim();
+    if (text.length > 3 && texts.indexOf(text) === -1) {
+      texts.push(text);
+    }
+  }
+
+  return texts.join("\n");
+}
+
 export default function ImportHotelsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -58,13 +92,21 @@ export default function ImportHotelsPage() {
     setPreview(null);
     setResults(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
+      // Extract text from PDF in browser
+      const text = await extractTextFromPDF(file);
+
+      if (!text.trim() || text.length < 20) {
+        setError("未能从PDF中提取到足够的文字内容，请确认PDF是否为文字版（非扫描图片）");
+        setAnalyzing(false);
+        return;
+      }
+
+      // Send extracted text to API for AI analysis
       const res = await fetch("/api/hotels/import", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "text/plain" },
+        body: text,
       });
 
       const data = await res.json();
@@ -166,7 +208,7 @@ export default function ImportHotelsPage() {
                 {analyzing ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    正在分析中...
+                    正在分析中...（需要几秒钟）
                   </>
                 ) : (
                   "开始分析"
