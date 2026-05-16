@@ -32,8 +32,8 @@ export function Sidebar() {
     <aside className="hidden md:flex h-screen w-56 flex-col border-r bg-sidebar-background">
       <div className="flex h-14 items-center border-b px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold text-lg">
-          <span className="text-primary">🏕</span>
-          <span>旅住通</span>
+          <span className="text-primary">🦁</span>
+          <span>动物王国 Animalia</span>
         </Link>
       </div>
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">

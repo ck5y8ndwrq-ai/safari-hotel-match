@@ -38,7 +38,7 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="left" className="w-56 p-0">
         <div className="flex h-14 items-center border-b px-4">
-          <span className="font-semibold text-lg">🏕 旅住通</span>
+          <span className="font-semibold text-lg">🦁 动物王国 Animalia</span>
         </div>
         <nav className="p-3 space-y-1">
           {navItems.map((item) => {

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "旅住通 - 东非酒店智能匹配系统",
+  title: "动物王国 Animalia - 东非酒店智能匹配系统",
   description: "坦桑尼亚 & 肯尼亚酒店智能匹配管理系统",
 };
 

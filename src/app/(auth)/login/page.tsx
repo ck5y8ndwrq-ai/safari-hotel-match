@@ -18,9 +18,9 @@ export default function LoginPage() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
-        <div className="text-3xl mb-2">🏕</div>
-        <CardTitle className="text-xl">旅住通</CardTitle>
-        <CardDescription>东非酒店智能匹配系统</CardDescription>
+        <div className="text-3xl mb-2">🦁</div>
+        <CardTitle className="text-xl">动物王国 Animalia</CardTitle>
+        <CardDescription>东非野生动物酒店智能匹配系统</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
