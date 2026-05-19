@@ -20,28 +20,70 @@ interface ImportResult {
   error?: string;
 }
 
-// Client-side PDF text extraction using pdfjs-dist
+// Client-side PDF text extraction
+// Uses simple PDF text extraction (no worker needed, works in China)
 async function extractTextFromPDF(file: File): Promise<string> {
-  const pdfjs = await import("pdfjs-dist");
-
-  // Use CDN worker
-  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-
   const arrayBuffer = await file.arrayBuffer();
-  const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  const raw = new TextDecoder("utf-8", { fatal: false }).decode(arrayBuffer);
 
-  const pages: string[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const text = (content.items as Array<{ str?: string }>)
-      .filter((item) => typeof item.str === "string")
-      .map((item) => item.str as string).join(" ");
-    pages.push(text);
+  // Method 1: Extract text between parentheses in PDF content streams
+  const texts = new Set<string>();
+  const parenRegex = /\(([^)]*)\)\s*Tj/g;
+  let match: RegExpExecArray | null;
+  while ((match = parenRegex.exec(raw)) !== null) {
+    const text = match[1]
+      .replace(/\\([0-9]{3})/g, (_, c) => String.fromCharCode(parseInt(c, 8)))
+      .replace(/\\(.)/g, "$1")
+      .trim();
+    if (text.length > 3 && /[a-zA-Z]{3,}|[一-鿿]/.test(text)) {
+      texts.add(text);
+    }
   }
 
-  await doc.destroy();
-  return pages.join("\n\n");
+  // Method 2: Also look for text between parentheses without Tj operator
+  const simpleRegex = /\(([^)]{4,})\)/g;
+  while ((match = simpleRegex.exec(raw)) !== null) {
+    const text = match[1]
+      .replace(/\\([0-9]{3})/g, (_, c) => String.fromCharCode(parseInt(c, 8)))
+      .replace(/\\(.)/g, "$1")
+      .trim();
+    if (/[a-zA-Z]{3,}|[一-鿿]/.test(text)) {
+      texts.add(text);
+    }
+  }
+
+  let result = Array.from(texts).join("\n");
+
+  // If simple extraction yields little text, try pdfjs-dist as fallback
+  if (result.length < 100) {
+    try {
+      const pdfjs = await import("pdfjs-dist");
+      // Try Chinese CDN for worker, fallback to cloudflare
+      try {
+        pdfjs.GlobalWorkerOptions.workerSrc = "//cdn.bootcdn.net/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+      } catch {
+        pdfjs.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+      }
+
+      const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      const pages: string[] = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const text = (content.items as Array<{ str?: string }>)
+          .filter((item) => typeof item.str === "string")
+          .map((item) => item.str as string)
+          .join(" ");
+        pages.push(text);
+      }
+      await doc.destroy();
+      result = pages.join("\n\n");
+    } catch {
+      // pdfjs-dist also failed, use whatever we got from the simple method
+    }
+  }
+
+  return result;
 }
 
 export default function ImportHotelsPage() {
