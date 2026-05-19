@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const DEEPSEEK_API_KEY = "sk-f99c3a7d7b994ac1b743fc3b737add81";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "sk-f99c3a7d7b994ac1b743fc3b737add81";
 
 interface ParsedHotel {
   regionNameZh: string;
