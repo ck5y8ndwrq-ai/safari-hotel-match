@@ -41,13 +41,20 @@ interface ParsedHotel {
 }
 
 async function analyzeWithDeepSeek(text: string): Promise<ParsedHotel[]> {
-  const prompt = `你是一个专业的酒店数据录入助手。请从以下酒店介绍文档中提取所有酒店信息，以严格的JSON数组格式返回。
+  const isEnglish = !/[一-鿿]/.test(text.slice(0, 500));
+  const langInstruction = isEnglish
+    ? "文档语言为英文。请提取酒店数据，nameZh填英文名（保持原文），nameEn也填英文名。regionNameZh填英文区域名。"
+    : "文档语言为中文。请提取酒店数据。";
 
-返回格式（严格遵循以下结构，每个酒店一个对象）：
+  const prompt = `${langInstruction}
+
+提取以下酒店文档中的所有酒店信息，以严格的JSON数组格式返回。
+
+返回格式：
 [
   {
-    "regionNameZh": "区域中文名（如：塞伦盖蒂国家公园）",
-    "nameZh": "酒店中文名",
+    "regionNameZh": "区域名称",
+    "nameZh": "酒店中文名（或英文名）",
     "nameEn": "酒店英文名",
     "accommodationType": "住宿类型: lodge|tented_camp|hotel|resort|villa",
     "starRating": 星级(1-5),
