@@ -16,6 +16,7 @@ interface ParsedHotel {
 
 interface ImportResult {
   nameZh: string;
+  nameEn?: string;
   success: boolean;
   error?: string;
 }
@@ -302,7 +303,7 @@ export default function ImportHotelsPage() {
                   <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
                 )}
                 <div>
-                  <p className="text-sm font-medium">{r.nameZh}</p>
+                  <p className="text-sm font-medium">{r.nameZh || r.nameEn || "未命名酒店"}</p>
                   {r.error && <p className="text-xs text-destructive">{r.error}</p>}
                 </div>
               </div>

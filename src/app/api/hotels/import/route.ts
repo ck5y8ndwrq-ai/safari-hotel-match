@@ -174,11 +174,33 @@ async function handleConfirm(hotels: ParsedHotel[]) {
 
   for (const hotel of hotels) {
     try {
+      // Validate required fields
+      if (!hotel.nameZh && !hotel.nameEn) {
+        results.push({ nameZh: "", success: false, error: "酒店名称不能为空" });
+        continue;
+      }
+      const displayName = hotel.nameZh || hotel.nameEn || "";
+
+      if (!hotel.accommodationType) {
+        results.push({ nameZh: displayName, success: false, error: "缺少住宿类型" });
+        continue;
+      }
+
+      // Find region by nameZh or nameEn
+      if (!hotel.regionNameZh) {
+        results.push({ nameZh: displayName, success: false, error: "缺少区域信息，无法匹配数据库中的区域" });
+        continue;
+      }
       const region = await prisma.region.findFirst({
-        where: { nameZh: { contains: hotel.regionNameZh } },
+        where: {
+          OR: [
+            { nameZh: { contains: hotel.regionNameZh } },
+            { nameEn: { contains: hotel.regionNameZh } },
+          ],
+        },
       });
       if (!region) {
-        results.push({ nameZh: hotel.nameZh, success: false, error: `未找到区域: ${hotel.regionNameZh}` });
+        results.push({ nameZh: displayName, success: false, error: `未找到区域「${hotel.regionNameZh}」，请先在区域管理中创建该区域` });
         continue;
       }
 
@@ -204,23 +226,25 @@ async function handleConfirm(hotels: ParsedHotel[]) {
       if (hotel.roomTypes && hotel.roomTypes.length > 0) {
         hotelData.roomTypes = {
           create: hotel.roomTypes.map((rt) => ({
-            nameZh: rt.nameZh,
+            nameZh: rt.nameZh || "未知房型",
             nameEn: rt.nameEn ?? null,
-            roomCategory: rt.roomCategory,
+            roomCategory: rt.roomCategory || "standard",
             maxGuests: rt.maxGuests ?? 2,
             bedType: rt.bedType ?? null,
-            seasonalPrices: rt.seasonalPrices
+            seasonalPrices: rt.seasonalPrices && rt.seasonalPrices.length > 0
               ? {
-                  create: rt.seasonalPrices.map((sp) => ({
-                    seasonName: sp.seasonName,
-                    dateStart: new Date(sp.dateStart),
-                    dateEnd: new Date(sp.dateEnd),
-                    priceRoomOnly: sp.priceRoomOnly ?? null,
-                    priceHalfBoard: sp.priceHalfBoard ?? null,
-                    priceFullBoard: sp.priceFullBoard ?? null,
-                    currency: sp.currency ?? "USD",
-                    isAvailable: true,
-                  })),
+                  create: rt.seasonalPrices
+                    .filter((sp) => sp.seasonName && sp.dateStart && sp.dateEnd)
+                    .map((sp) => ({
+                      seasonName: sp.seasonName,
+                      dateStart: new Date(sp.dateStart),
+                      dateEnd: new Date(sp.dateEnd),
+                      priceRoomOnly: sp.priceRoomOnly ?? null,
+                      priceHalfBoard: sp.priceHalfBoard ?? null,
+                      priceFullBoard: sp.priceFullBoard ?? null,
+                      currency: sp.currency ?? "USD",
+                      isAvailable: true,
+                    })),
                 }
               : undefined,
           })),
