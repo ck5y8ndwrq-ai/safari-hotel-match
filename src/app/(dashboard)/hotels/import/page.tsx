@@ -20,38 +20,29 @@ interface ImportResult {
   error?: string;
 }
 
-// Client-side PDF text extraction - uses regex on raw PDF data (no external deps)
+// Client-side PDF text extraction using pdfjs-dist
 async function extractTextFromPDF(file: File): Promise<string> {
+  // Dynamically import pdfjs-dist (saves bundle size)
+  const pdfjsLib = await import("pdfjs-dist");
+
+  // Use bootcdn.cn for the worker (accessible in China)
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.bootcdn.net/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+
   const arrayBuffer = await file.arrayBuffer();
-  const raw = new TextDecoder("utf-8", { fatal: false }).decode(arrayBuffer);
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-  // Extract text between parentheses in PDF content streams (Tj operator)
-  const texts = new Set<string>();
-  const parenRegex = /\(([^)]*)\)\s*Tj/g;
-  let match: RegExpExecArray | null;
-  while ((match = parenRegex.exec(raw)) !== null) {
-    const text = match[1]
-      .replace(/\\([0-9]{3})/g, (_, c) => String.fromCharCode(parseInt(c, 8)))
-      .replace(/\\(.)/g, "$1")
-      .trim();
-    if (text.length > 3 && /[a-zA-Z]{3,}|[一-鿿]/.test(text)) {
-      texts.add(text);
-    }
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => ("str" in item ? item.str || "" : ""))
+      .join(" ");
+    pages.push(text);
   }
 
-  // Also look for text between parentheses without Tj operator
-  const simpleRegex = /\(([^)]{4,})\)/g;
-  while ((match = simpleRegex.exec(raw)) !== null) {
-    const text = match[1]
-      .replace(/\\([0-9]{3})/g, (_, c) => String.fromCharCode(parseInt(c, 8)))
-      .replace(/\\(.)/g, "$1")
-      .trim();
-    if (/[a-zA-Z]{3,}|[一-鿿]/.test(text)) {
-      texts.add(text);
-    }
-  }
-
-  return Array.from(texts).join("\n");
+  return pages.join("\n---\n");
 }
 
 export default function ImportHotelsPage() {
