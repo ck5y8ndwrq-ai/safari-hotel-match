@@ -25,9 +25,8 @@ async function extractTextFromPDF(file: File): Promise<string> {
   // Dynamically import pdfjs-dist (saves bundle size)
   const pdfjsLib = await import("pdfjs-dist");
 
-  // Use bootcdn.cn for the worker (accessible in China)
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.bootcdn.net/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+  // Use local worker file (no CDN dependency)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
