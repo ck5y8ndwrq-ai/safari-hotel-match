@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Upload, FileText, Check, AlertCircle, Loader2 } from "lucide-react";
@@ -20,38 +20,28 @@ interface ImportResult {
   error?: string;
 }
 
-// Simple client-side PDF text extraction
+// Client-side PDF text extraction using pdfjs-dist
 async function extractTextFromPDF(file: File): Promise<string> {
+  const pdfjs = await import("pdfjs-dist");
+
+  // Use CDN worker
+  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
   const arrayBuffer = await file.arrayBuffer();
-  const raw = new TextDecoder("utf-8", { fatal: false }).decode(arrayBuffer);
+  const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
 
-  // Extract text between parentheses (common in PDF content streams)
-  const texts: string[] = [];
-  const regex = /\(([^)]*)\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(raw)) !== null) {
-    let text = match[1]
-      .replace(/\\([0-9]{3})/g, (_, code) => String.fromCharCode(parseInt(code, 8)))
-      .replace(/\\(.)/g, "$1");
-    text = text.trim();
-    if (text.length > 3 && /[一-鿿]|[a-zA-Z]{3,}/.test(text)) {
-      texts.push(text);
-    }
+  const pages: string[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const text = (content.items as Array<{ str?: string }>)
+      .filter((item) => typeof item.str === "string")
+      .map((item) => item.str as string).join(" ");
+    pages.push(text);
   }
 
-  // Also try Tj operator format
-  const tjRegex = /\(([^)]*)\)\s*Tj/g;
-  while ((match = tjRegex.exec(raw)) !== null) {
-    let text = match[1]
-      .replace(/\\([0-9]{3})/g, (_, code) => String.fromCharCode(parseInt(code, 8)))
-      .replace(/\\(.)/g, "$1");
-    text = text.trim();
-    if (text.length > 3 && texts.indexOf(text) === -1) {
-      texts.push(text);
-    }
-  }
-
-  return texts.join("\n");
+  await doc.destroy();
+  return pages.join("\n\n");
 }
 
 export default function ImportHotelsPage() {
