@@ -186,19 +186,18 @@ async function handleConfirm(hotels: ParsedHotel[]) {
         continue;
       }
 
-      // Find region by nameZh or nameEn
+      // Find region by fuzzy matching nameZh or nameEn
       if (!hotel.regionNameZh) {
         results.push({ nameZh: displayName, success: false, error: "缺少区域信息，无法匹配数据库中的区域" });
         continue;
       }
-      const region = await prisma.region.findFirst({
-        where: {
-          OR: [
-            { nameZh: { contains: hotel.regionNameZh } },
-            { nameEn: { contains: hotel.regionNameZh } },
-          ],
-        },
-      });
+      const allRegions = await prisma.region.findMany();
+      const region = allRegions.find((r) =>
+        hotel.regionNameZh.includes(r.nameZh)
+        || r.nameZh.includes(hotel.regionNameZh)
+        || (r.nameEn && hotel.regionNameZh.includes(r.nameEn))
+        || (r.nameEn && r.nameEn.includes(hotel.regionNameZh))
+      );
       if (!region) {
         results.push({ nameZh: displayName, success: false, error: `未找到区域「${hotel.regionNameZh}」，请先在区域管理中创建该区域` });
         continue;
