@@ -108,22 +108,29 @@ async function analyzeWithDeepSeek(text: string): Promise<ParsedHotel[]> {
 文档内容：
 ${text.slice(0, 30000)}`;
 
-  const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-v4-flash",
-      messages: [
-        { role: "system", content: "你是一个酒店数据提取助手，只输出JSON格式数据。" },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.1,
-      max_tokens: 8192,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    var res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "deepseek-v4-flash",
+        messages: [
+          { role: "system", content: "你是一个酒店数据提取助手，只输出JSON格式数据。" },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 8192,
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const err = await res.text();
@@ -131,8 +138,18 @@ ${text.slice(0, 30000)}`;
   }
 
   const json = await res.json();
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new Error("DeepSeek returned empty response");
+  const message = json.choices?.[0]?.message;
+  const content = message?.content;
+  if (!content) {
+    console.error("DeepSeek empty response details:", JSON.stringify({
+      finishReason: json.choices?.[0]?.finish_reason,
+      hasReasoning: !!message?.reasoning_content,
+      reasoningPreview: message?.reasoning_content?.slice(0, 500),
+      usage: json.usage,
+      model: json.model,
+    }));
+    throw new Error("DeepSeek 返回为空，可能是文档内容不包含酒店信息或 API 响应超时，请重试");
+  }
 
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const cleanJson = jsonMatch ? jsonMatch[1] : content;
