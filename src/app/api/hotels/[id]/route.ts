@@ -59,6 +59,37 @@ export async function PUT(req: NextRequest, { params }: Params) {
       },
     });
 
+    // Update tags: delete existing, create new
+    const tagCodes = (typeof body.tags === "string" ? body.tags : "")
+      .split(",")
+      .map((t: string) => t.trim())
+      .filter(Boolean);
+    await prisma.hotelTag.deleteMany({ where: { hotelId: hotel.id } });
+    if (tagCodes.length > 0) {
+      await prisma.hotelTag.createMany({
+        data: tagCodes.map((code: string) => ({
+          hotelId: hotel.id,
+          tagCode: code,
+          weight: 3,
+        })),
+      });
+    }
+
+    // Update targetSpecies: delete existing, create new
+    const speciesList = (typeof body.targetSpecies === "string" ? body.targetSpecies : "")
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    await prisma.hotelTargetSpecies.deleteMany({ where: { hotelId: hotel.id } });
+    if (speciesList.length > 0) {
+      await prisma.hotelTargetSpecies.createMany({
+        data: speciesList.map((species: string) => ({
+          hotelId: hotel.id,
+          species,
+        })),
+      });
+    }
+
     return NextResponse.json({ hotel });
   } catch (error) {
     console.error("PUT /api/hotels/[id] error:", error);

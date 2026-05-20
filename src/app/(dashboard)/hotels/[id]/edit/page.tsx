@@ -23,6 +23,8 @@ export default function EditHotelPage() {
     guestRating: "",
     contactPhone: "",
     descriptionZh: "",
+    tags: "",
+    targetSpecies: "",
     transferProvided: false,
     hasChineseService: false,
   });
@@ -44,6 +46,8 @@ export default function EditHotelPage() {
           guestRating: h.guestRating ? String(h.guestRating) : "",
           contactPhone: h.contactPhone || "",
           descriptionZh: h.descriptionZh || "",
+          tags: (h.hotelTags || []).map((t: { tagCode: string }) => t.tagCode).join(", "),
+          targetSpecies: (h.targetSpecies || []).map((s: { species: string }) => s.species).join(", "),
           transferProvided: h.transferProvided,
           hasChineseService: h.hasChineseService,
         });
@@ -132,6 +136,14 @@ export default function EditHotelPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">描述</label>
               <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={form.descriptionZh} onChange={(e) => setForm({ ...form, descriptionZh: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">标签（多个用英文逗号分隔）</label>
+              <Input placeholder="例如: luxury, eco, safari" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">目标动物（多个用英文逗号分隔）</label>
+              <Input placeholder="例如: lion, elephant, leopard" value={form.targetSpecies} onChange={(e) => setForm({ ...form, targetSpecies: e.target.value })} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">联系电话</label>
