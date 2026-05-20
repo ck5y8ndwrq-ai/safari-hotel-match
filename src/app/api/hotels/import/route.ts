@@ -136,7 +136,42 @@ ${text.slice(0, 30000)}`;
 
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const cleanJson = jsonMatch ? jsonMatch[1] : content;
-  return JSON.parse(cleanJson.trim());
+  return safeParseJSON(cleanJson.trim());
+}
+
+/**
+ * Safely parse LLM-generated JSON with error recovery.
+ * DeepSeek sometimes returns malformed JSON (unterminated strings, trailing commas).
+ */
+function safeParseJSON(text: string): ParsedHotel[] {
+  // Standard parse first
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Recovery 1: trailing commas + normalize whitespace
+    let fixed = text.replace(/,(\s*[}\]])/g, "$1").replace(/\n\s*/g, " ").replace(/\r/g, "");
+    try { return JSON.parse(fixed); } catch { /* skip */ }
+
+    // Recovery 2: progressive bracket matching for truncated JSON
+    let depth = 0, inStr = false, escape = false, lastClose = 0;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (escape) { escape = false; continue; }
+      if (ch === "\\" && inStr) { escape = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "{" || ch === "[") depth++;
+      if (ch === "}" || ch === "]") { depth--; if (depth === 0) lastClose = i + 1; }
+    }
+    if (lastClose > 0) {
+      try { return JSON.parse(text.slice(0, lastClose)); } catch { /* skip */ }
+    }
+
+    throw new Error(
+      "DeepSeek 返回的 JSON 格式错误。通常重试即可解决。\n" +
+      `(${text.slice(0, 120)}...)`
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
